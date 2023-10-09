@@ -208,7 +208,7 @@ if __name__ == '__main__':
     if args.data_parallel:
         model = torch.nn.DataParallel(model)
 
-    load_path = os.path.join('models', model_name)
+    load_path = os.path.join('../models/', model_name)
     model.load_state_dict(torch.load(load_path))
     print('Successfully load model:', model_name)
 
