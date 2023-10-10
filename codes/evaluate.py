@@ -35,7 +35,7 @@ if __name__ == '__main__':
 
     model_path = 'models/' + model_name
 
-    args.batch_size = 256
+    # args.batch_size = 256
 
     # set seed
     random.seed(42)
@@ -57,87 +57,50 @@ if __name__ == '__main__':
     model.eval()
     print('Successfully load model:', model_name)
 
-    if args.test_mode in ['distribution', 'number', 'mechanism', 'split']:
-        # test on different dataset
-        if args.test_mode == 'distribution':
-            # different distribution
-            dataset_types = [(['uniform'], 1), (['gaussian'], 1), (['uniform', 'gaussian'], 1),
-                             (['uniform'], 0), (['gaussian'], 0), (['uniform', 'gaussian'], 0)]
-            datasets = []  # U_0, G_0, U+G
-            for dist, zero_start in dataset_types:
-                args.distributions, args.start_from_zero = dist, zero_start
-                datasets.append(get_test_loader(args))
-        elif args.test_mode == 'number':
-            # different player_num
-            if type(args.number_range[0]) is str:
-                args.number_range = [int(x) for x in args.number_range]
-            dataset_types = np.arange(*args.number_range)
-            datasets = []
-            for player_num in dataset_types:
-                args.max_player = player_num
-                args.test_size = 4000
-                filename = f'{player_num}_testset_2000.json'
-                print('loading file:', filename)
-                datasets.append(get_test_loader(args, filename))
-        elif args.test_mode == 'mechanism':
-            mechanisms = [['first'], ['second'], ['first', 'second']]
-            entries = [0, 3]
-            dist_types = [(['uniform'], 1), (['gaussian'], 1), (['uniform'], 0), (['gaussian'], 0),
-                          (['uniform', 'gaussian'], 0)]
-            datasets = []  # U_0, G_0, U+G
-            dataset_types = []
-            for m in mechanisms:
-                for e in entries:
+    if args.test_mode == 'split':
+        # iterate over all splited dataset & distribution & mechanism
+        mechanisms = [['first'], ['second'], ['first', 'second']]
+        entries = [0, 3]
+        dist_types = [(['uniform'], 1), (['gaussian'], 1), (['uniform'], 0), (['gaussian'], 0),
+                        (['uniform', 'gaussian'], None)]
+        split_ranges = [(2, 4), (5, 7), (8, 10)]
+        datasets = []  # U_0, G_0, U+G
+        dataset_types = []
+        for m in mechanisms:
+            for e in entries:
+                for (lower, upper) in split_ranges:
                     for dist, zero_start in dist_types:
                         args.mechanisms = m
                         args.max_entry = e
                         args.distributions, args.start_from_zero = dist, zero_start
-                        datasets.append(get_test_loader(args))
-                        dataset_types.append((m, e, dist, zero_start))
-        else:
-            # iterate over all splited dataset & distribution & mechanism
-            mechanisms = [['first'], ['second'], ['first', 'second']]
-            entries = [0, 3]
-            dist_types = [(['uniform'], 1), (['gaussian'], 1), (['uniform'], 0), (['gaussian'], 0),
-                          (['uniform', 'gaussian'], None)]
-            split_ranges = [(2, 4), (5, 7), (8, 10)]
-            datasets = []  # U_0, G_0, U+G
-            dataset_types = []
-            for m in mechanisms:
-                for e in entries:
-                    for (lower, upper) in split_ranges:
-                        for dist, zero_start in dist_types:
-                            args.mechanisms = m
-                            args.max_entry = e
-                            args.distributions, args.start_from_zero = dist, zero_start
-                            if zero_start == 1:
-                                args.test_size = 2000
-                                filename = f'zero_{lower}-{upper}_testset_2000.json'
-                            elif zero_start == 0:
-                                args.test_size = 2000
-                                filename = f'no-zero_{lower}-{upper}_testset_2000.json'
-                            else:
-                                args.test_size = 4000
-                                filename = f'{lower}-{upper}_testset_2000.json'
-                            print('loading file:', filename)
-                            datasets.append(get_test_loader(args, filename))
-                            dataset_types.append((m, e, dist, zero_start, lower, upper))
-            # add test all player on hybrid mechanism
-            args.mechanisms, args.max_entry = ['first', 'second'], 3
-            for dist, zero_start in dist_types:
-                args.distributions, args.start_from_zero = dist, zero_start
-                if zero_start == 1:
-                    args.test_size = 6000
-                    filename = f'zero_testset_2000.json'
-                elif zero_start == 0:
-                    args.test_size = 6000
-                    filename = f'no-zero_testset_2000.json'
-                else:
-                    args.test_size = 12000
-                    filename = f'testset_2000.json'
-                print('loading file:', filename)
-                datasets.append(get_test_loader(args, filename))
-                dataset_types.append((m, e, dist, zero_start, None, None))
+                        if zero_start == 1:
+                            args.test_size = 2000
+                            filename = f'zero_{lower}-{upper}_testset_2000.json'
+                        elif zero_start == 0:
+                            args.test_size = 2000
+                            filename = f'no-zero_{lower}-{upper}_testset_2000.json'
+                        else:
+                            args.test_size = 4000
+                            filename = f'{lower}-{upper}_testset_2000.json'
+                        print('loading file:', filename)
+                        datasets.append(get_test_loader(args, filename))
+                        dataset_types.append((m, e, dist, zero_start, lower, upper))
+        # add test all player on hybrid mechanism
+        args.mechanisms, args.max_entry = ['first', 'second'], 3
+        for dist, zero_start in dist_types:
+            args.distributions, args.start_from_zero = dist, zero_start
+            if zero_start == 1:
+                args.test_size = 6000
+                filename = f'zero_testset_2000.json'
+            elif zero_start == 0:
+                args.test_size = 6000
+                filename = f'no-zero_testset_2000.json'
+            else:
+                args.test_size = 12000
+                filename = f'testset_2000.json'
+            print('loading file:', filename)
+            datasets.append(get_test_loader(args, filename))
+            dataset_types.append((m, e, dist, zero_start, None, None))
 
         avg_test_eps = [0, 0, 0, 0, 0]
         for test_type, test_loader in zip(dataset_types, datasets):
@@ -314,99 +277,5 @@ if __name__ == '__main__':
                         )
                         print('Using utils.benchmark.Timer')
                         print(t.timeit(10))
-
-    elif args.test_mode == 'symmetric_number':
-        # test on symmetric games (only support first/second price with no entry)
-        enc = {'first': 0, 'second': 1, }
-        for mechanism_name in args.mechanisms:
-            mechanism = enc[mechanism_name]
-            print('---------------------------------------------------------------')
-            print(f"TEST ON SYMMETRIC {mechanism_name.upper()} PRICE GAMES")
-            input_mechanism = torch.tensor([mechanism]).to(device)
-            input_entry = torch.zeros_like(input_mechanism).to(device)
-            if type(args.number_range[0]) is str:
-                args.number_range = [int(x) for x in args.number_range]
-            for player_num in range(*args.number_range):
-                cur_max_player = max(player_num, args.max_player)
-                print('current player:', player_num)
-
-                upper_range = 20 + 1
-                value_hist = torch.zeros(args.valuation_range)
-                value_hist[:upper_range] = 1/upper_range
-                symmetric_value_dists = value_hist.view(1,1,args.valuation_range).repeat(1, cur_max_player, 1)
-                symmetric_value_dists[0, player_num:] = 0
-                symmetric_value_dists = symmetric_value_dists.float().to(device)  # 1*N*V
-
-                player_values = torch.arange(args.valuation_range).view(-1, 1).repeat(1, cur_max_player).flatten()  # (V*N)
-                player_values = player_values.unsqueeze(-1) == torch.arange(args.valuation_range)  # (V*N) * V
-                player_values = player_values.unsqueeze(0).float().to(device)  # 1*VN*2V
-
-                # print(symmetric_value_dists[0,:,-1])
-                # print(player_values.shape)
-
-                with torch.no_grad():
-                    # predicted policy
-                    if args.requires_value:
-                        y = transpose_y0(args, model((input_mechanism, input_entry, symmetric_value_dists, player_values)))
-                        # sample bid to calculate v/bid
-                        y = y[0, :player_num]  # n*V*V
-                        bids = torch.distributions.Categorical(probs=y).sample(torch.Size([100]))  # k*n*V
-                        bids = bids.float().transpose(0, 2).transpose(0, 1)  # k*n*V -> V*n*k -> n*V*k
-                        bid_per_v = bids.mean(dim=-1)  # n*V
-                        # import matplotlib.pyplot as plt
-                        # plt.plot(torch.arange(args.valuation_range), bid_per_v.mean(dim=0).cpu())
-                        # plt.savefig(f'{player_num}.png')
-                        # plt.close()
-                        # v/bid
-                        division_values = torch.arange(args.valuation_range).unsqueeze(0).repeat(player_num,1).to(device)  # n*V
-                        division_values[:, 0] = 1  # v=0 --> v=1 (for division)
-                        n_ratio = bid_per_v / division_values
-                        print((player_num-1)/player_num, n_ratio.mean())
-
-    elif args.test_mode == 'example':
-        # fp, G[0,10], G[0,5], G[0,5]
-        player_num = 3
-        upper_values = [20, 10, 10]
-        player_value_hist = []
-        for player_upper_value in upper_values:
-            player_lower_value, player_val_size = 0, player_upper_value
-            player_possible_values = np.arange(player_lower_value, player_upper_value + 1)
-            mean, size = (player_lower_value + player_upper_value) / 2, player_val_size
-            transform = lambda x: 6 / size * (x - mean)
-            tmp = norm.cdf(transform(player_possible_values + 0.5)) - norm.cdf(
-                transform(player_possible_values - 0.5))
-            tmp[0] = norm.cdf(transform(player_lower_value + 0.5))
-            tmp[-1] = 1 - norm.cdf(transform(player_upper_value - 0.5))
-            gaussian_value_hist = np.zeros(args.valuation_range)
-            gaussian_value_hist[player_lower_value:player_upper_value + 1] = tmp
-            player_value_hist.append(gaussian_value_hist)
-        print("Generated value hist:\n", player_value_hist)
-        value_dists = np.array(player_value_hist + [np.zeros(args.valuation_range)] * (args.max_player - player_num))
-        input_value_dists = torch.from_numpy(value_dists).unsqueeze(0).float().to(device)
-        input_mechanism, input_entry = torch.tensor([0]).to(device), torch.tensor([0]).to(device)
-        input_player_num = torch.tensor([player_num]).to(device)
-        player_values = generate_values(args, device)
-        with torch.no_grad():
-            start = time.time()
-            if args.requires_value:
-                y0 = model((input_mechanism, input_entry, input_value_dists, player_values))
-                y = transpose_y0(args, y0)
-            else:
-                y = model((input_mechanism, input_entry, input_value_dists))
-            end = time.time()
-            print('using time:', end - start)
-            # calculate max exploit
-            exploits, _, _ = calculate_exploit(input_mechanism, input_entry, input_player_num,
-                                               input_value_dists,
-                                               y, device, overbid_punish=False)
-            max_exploits, _ = exploits.max(dim=-1)
-            print('Max Exploit:', max_exploits[0].cpu())
-            # dump strategy
-            print('saving strategy of p0')
-            np.save(os.path.join('results', 'strategy'), y[0, 0].cpu().numpy())
-            # plot strategy
-            for pid in range(player_num):
-                plot_strategy(input_value_dists[0, pid].cpu().numpy(), y[0, pid].cpu().numpy(), path=model_name,
-                              filename=f'paper_player_id={pid}_bid_strategy')
 
 
