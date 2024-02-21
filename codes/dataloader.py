@@ -104,7 +104,7 @@ class RandomHybridTrainDataset(Dataset):
 
 class FixedHybridDataset(Dataset):
 
-    def __init__(self, args, enlarge_times=1, is_test=False, requires_value=False, filename=None):
+    def __init__(self, args, enlarge_times=1, is_test=False, requires_value=False, filename=None, is_benchmark=False):
         self.mechanisms = args.mechanisms
         self.distributions = args.distributions
         self.max_player = args.max_player
@@ -116,6 +116,7 @@ class FixedHybridDataset(Dataset):
 
         self.enlarge_times = enlarge_times
         self.is_test = is_test
+        self.is_benchmark = is_benchmark
         self.requires_value = requires_value
 
         if filename is not None:
@@ -132,7 +133,11 @@ class FixedHybridDataset(Dataset):
             for key in self.dataset:
                 self.dataset[key] += zero_dataset[key]
 
-        self.iteration = len(args.mechanisms) * len(args.distributions) * (args.max_entry + 1)
+        if self.is_benchmark:
+            self.iteration = len(args.mechanisms) * len(args.distributions) * (args.max_entry + 1 - self.has_entry)
+        else:
+            self.iteration = len(args.mechanisms) * len(args.distributions) * (args.max_entry + 1)
+
         if self.is_test:
             # test: first K items, iterate over mechanisms / distributions / entries
             self.dataset_size = self.test_size * self.iteration
@@ -155,11 +160,14 @@ class FixedHybridDataset(Dataset):
 
         # select mechanism by idx
         game_id, game_type = idx % self.iteration, []
-        for ntypes in [(self.max_entry + 1), len(self.distributions), len(self.mechanisms)]:
+        entry_num = self.max_entry + 1
+        entry_num -= self.has_entry if self.is_benchmark else 0
+        for ntypes in [entry_num, len(self.distributions), len(self.mechanisms)]:
             game_type.append(game_id % ntypes)
             game_id = int(game_id / ntypes)
         cur_entry, cur_dist_type, cur_mechanism = (game_type[0], self.distributions[game_type[1]],
                                                    self.mechanisms[game_type[2]])
+        cur_entry = cur_entry + 1 if self.has_entry and self.is_benchmark else cur_entry
 
         cur_player_num = self.dataset['number'][cur_idx]
         # uniform_value_hist or gaussian_value_hist (already padded to V)
@@ -265,14 +273,15 @@ class HybridDataset(Dataset):
             return mechanism_encoding(cur_mechanism, cur_entry), cur_entry, cur_player_num, player_value_dists
 
 
-def get_train_loader(args, filename=None):
+def get_train_loader(args, filename=None, benchmark=False):
     if args.iterate_game_types:
         if args.random_dataset:
             train_loader = DataLoader(RandomHybridTrainDataset(args,requires_value=args.requires_value),
                                       batch_size=args.batch_size, shuffle=True)
         else:
             train_loader = DataLoader(FixedHybridDataset(args, enlarge_times=args.train_enlarge, is_test=False,
-                                                         requires_value=args.requires_value, filename=filename),
+                                                         requires_value=args.requires_value, filename=filename,
+                                                         is_benchmark=benchmark),
                                       batch_size=args.batch_size, shuffle=True)
     else:
         train_loader = DataLoader(HybridDataset(args, enlarge_times=args.train_enlarge, is_test=False,
@@ -281,10 +290,11 @@ def get_train_loader(args, filename=None):
     return train_loader
 
 
-def get_test_loader(args, filename=None):
+def get_test_loader(args, filename=None, benchmark=False):
     if args.iterate_game_types:
         test_loader = DataLoader(FixedHybridDataset(args, enlarge_times=1, is_test=True,
-                                                    requires_value=args.requires_value, filename=filename),
+                                                    requires_value=args.requires_value, filename=filename,
+                                                    is_benchmark=benchmark),
                                  batch_size=args.batch_size, shuffle=False)
     else:
         # when testing, enlarge_times is exactly game types
