@@ -17,7 +17,7 @@ def generate_values(args, device):
 parser.add_argument('--ckpt_name', type=str, default='bert_bert_on')
 parser.add_argument('--test_mode', type=str, default='symmetric',
                     choices=['symmetric', 'symmetric_time', 'distribution', 'number', 'mechanism', 'example',
-                             'split', 'symmetric_number'])
+                             'split', 'symmetric_number', 'special'])
 parser.add_argument('--number_range', nargs='+', default=[11, 16])
 parser.add_argument('--force_cpu', type=int, default=0)
 
@@ -35,7 +35,7 @@ if __name__ == '__main__':
 
     model_path = 'models/' + model_name
 
-    # args.batch_size = 256
+    args.batch_size = 256
 
     # set seed
     random.seed(42)
@@ -57,50 +57,109 @@ if __name__ == '__main__':
     model.eval()
     print('Successfully load model:', model_name)
 
-    if args.test_mode == 'split':
-        # iterate over all splited dataset & distribution & mechanism
-        mechanisms = [['first'], ['second'], ['first', 'second']]
-        entries = [0, 3]
-        dist_types = [(['uniform'], 1), (['gaussian'], 1), (['uniform'], 0), (['gaussian'], 0),
-                        (['uniform', 'gaussian'], None)]
-        split_ranges = [(2, 4), (5, 7), (8, 10)]
-        datasets = []  # U_0, G_0, U+G
-        dataset_types = []
-        for m in mechanisms:
-            for e in entries:
-                for (lower, upper) in split_ranges:
+    if args.test_mode in ['distribution', 'number', 'mechanism', 'split', 'special']:
+        # test on different dataset
+        if args.test_mode == 'distribution':
+            # different distribution
+            dataset_types = [(['uniform'], 1), (['gaussian'], 1), (['uniform', 'gaussian'], 1),
+                             (['uniform'], 0), (['gaussian'], 0), (['uniform', 'gaussian'], 0)]
+            datasets = []  # U_0, G_0, U+G
+            for dist, zero_start in dataset_types:
+                args.distributions, args.start_from_zero = dist, zero_start
+                datasets.append(get_test_loader(args))
+        elif args.test_mode == 'number':
+            # different player_num
+            if type(args.number_range[0]) is str:
+                args.number_range = [int(x) for x in args.number_range]
+            dataset_types = np.arange(*args.number_range)
+            datasets = []
+            for player_num in dataset_types:
+                args.max_player = player_num
+                args.test_size = 4000
+                filename = f'{player_num}_testset_2000.json'
+                print('loading file:', filename)
+                datasets.append(get_test_loader(args, filename))
+        elif args.test_mode == 'mechanism':
+            mechanisms = [['first'], ['second'], ['first', 'second']]
+            entries = [0, 3]
+            dist_types = [(['uniform'], 1), (['gaussian'], 1), (['uniform'], 0), (['gaussian'], 0),
+                          (['uniform', 'gaussian'], 0)]
+            datasets = []  # U_0, G_0, U+G
+            dataset_types = []
+            for m in mechanisms:
+                for e in entries:
                     for dist, zero_start in dist_types:
                         args.mechanisms = m
                         args.max_entry = e
                         args.distributions, args.start_from_zero = dist, zero_start
-                        if zero_start == 1:
-                            args.test_size = 2000
-                            filename = f'zero_{lower}-{upper}_testset_2000.json'
-                        elif zero_start == 0:
-                            args.test_size = 2000
-                            filename = f'no-zero_{lower}-{upper}_testset_2000.json'
-                        else:
-                            args.test_size = 4000
-                            filename = f'{lower}-{upper}_testset_2000.json'
-                        print('loading file:', filename)
-                        datasets.append(get_test_loader(args, filename))
-                        dataset_types.append((m, e, dist, zero_start, lower, upper))
-        # add test all player on hybrid mechanism
-        args.mechanisms, args.max_entry = ['first', 'second'], 3
-        for dist, zero_start in dist_types:
-            args.distributions, args.start_from_zero = dist, zero_start
-            if zero_start == 1:
-                args.test_size = 6000
-                filename = f'zero_testset_2000.json'
-            elif zero_start == 0:
-                args.test_size = 6000
-                filename = f'no-zero_testset_2000.json'
-            else:
-                args.test_size = 12000
-                filename = f'testset_2000.json'
-            print('loading file:', filename)
-            datasets.append(get_test_loader(args, filename))
-            dataset_types.append((m, e, dist, zero_start, None, None))
+                        datasets.append(get_test_loader(args))
+                        dataset_types.append((m, e, dist, zero_start))
+        elif args.test_mode == 'special':
+            args.mechanisms = ['first']
+            entries = [0, 3]
+            dist_types = [(['uniform'], 1), (['gaussian'], 1), (['uniform'], 0), (['gaussian'], 0),
+                          (['uniform', 'gaussian'], None)]
+            datasets, dataset_types = [], []
+            for entry in entries:
+                for dist, zero_start in dist_types:
+                    args.max_entry, args.distributions, args.start_from_zero = entry, dist, zero_start
+                    # the size is measured manually, to keep using the same dataset with main results
+                    if zero_start == 0:
+                        filename = 'no-zero_3_testset_664.json'
+                        args.test_size = 664
+                    elif zero_start == 1:
+                        filename = 'zero_3_testset_883.json'
+                        args.test_size = 883
+                    else:
+                        filename = '3_testset_1547.json'
+                        args.test_size = 1547
+                    print('loading file:', filename)
+                    datasets.append(get_test_loader(args, filename))
+                    dataset_types.append((entry, dist, zero_start))
+        else:
+            # iterate over all splited dataset & distribution & mechanism
+            mechanisms = [['first'], ['second'], ['first', 'second']]
+            entries = [0, 3]
+            dist_types = [(['uniform'], 1), (['gaussian'], 1), (['uniform'], 0), (['gaussian'], 0),
+                          (['uniform', 'gaussian'], None)]
+            split_ranges = [(2, 4), (5, 7), (8, 10)]
+            datasets = []  # U_0, G_0, U+G
+            dataset_types = []
+            for m in mechanisms:
+                for e in entries:
+                    for (lower, upper) in split_ranges:
+                        for dist, zero_start in dist_types:
+                            args.mechanisms = m
+                            args.max_entry = e
+                            args.distributions, args.start_from_zero = dist, zero_start
+                            if zero_start == 1:
+                                args.test_size = 2000
+                                filename = f'zero_{lower}-{upper}_testset_2000.json'
+                            elif zero_start == 0:
+                                args.test_size = 2000
+                                filename = f'no-zero_{lower}-{upper}_testset_2000.json'
+                            else:
+                                args.test_size = 4000
+                                filename = f'{lower}-{upper}_testset_2000.json'
+                            print('loading file:', filename)
+                            datasets.append(get_test_loader(args, filename, benchmark=True))
+                            dataset_types.append((m, e, dist, zero_start, lower, upper))
+            # add test all player on hybrid mechanism
+            args.mechanisms, args.max_entry = ['first', 'second'], 3
+            for dist, zero_start in dist_types:
+                args.distributions, args.start_from_zero = dist, zero_start
+                if zero_start == 1:
+                    args.test_size = 6000
+                    filename = f'zero_testset_2000.json'
+                elif zero_start == 0:
+                    args.test_size = 6000
+                    filename = f'no-zero_testset_2000.json'
+                else:
+                    args.test_size = 12000
+                    filename = f'testset_2000.json'
+                print('loading file:', filename)
+                datasets.append(get_test_loader(args, filename, benchmark=True))
+                dataset_types.append((m, e, dist, zero_start, None, None))
 
         avg_test_eps = [0, 0, 0, 0, 0]
         for test_type, test_loader in zip(dataset_types, datasets):
