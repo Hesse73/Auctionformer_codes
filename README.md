@@ -1,6 +1,6 @@
 # Auctionformer Codes
 
-Auctionformer: A Unified Deep Learning Algorithm for Solving Equilibrium Strategies in Auction Games
+[Auctionformer: A Unified Deep Learning Algorithm for Solving Equilibrium Strategies in Auction Games](https://proceedings.mlr.press/v235/huang24c.html)
 
 
 ## Run Auctionformer
